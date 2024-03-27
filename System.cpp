@@ -15,6 +15,7 @@ System::System(const std::string& game) : memory_{}, registers_{}, stack_{}, key
     delay_timer_ = 0;
     sound_timer_ = 0;
     display_ = memory_ + 0xF00;
+    key_flag = -2;
 
     uint8_t font[5 * 16] = {0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
                             0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -48,7 +49,7 @@ System::System(const std::string& game) : memory_{}, registers_{}, stack_{}, key
         printf("Problem opening file");
     }
 
-    if(SDL_Init(SDL_INIT_VIDEO) < 0){
+    if(SDL_Init(SDL_INIT_EVERYTHING) < 0){
         printf("SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
     } else {
         window_ = SDL_CreateWindow("chipmu", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 320, SDL_WINDOW_SHOWN);
@@ -58,41 +59,46 @@ System::System(const std::string& game) : memory_{}, registers_{}, stack_{}, key
             surface_ = SDL_GetWindowSurface(window_);
         }
     }
+
+    if(Mix_OpenAudio(22050, MIX_DEFAULT_FORMAT, 2, 4096) < 0){
+        printf("SDL_mixer could not initialize! SDL_Error: %s\n", SDL_GetError());
+    }
+
+    buzz_ = Mix_LoadWAV("beep.wav");
 }
 
 System::~System() {
+    Mix_FreeChunk(buzz_);
     SDL_DestroyWindow(window_);
     SDL_Quit();
 }
 
 void System::Start() {
-    auto timer = std::chrono::steady_clock::now();
-
     uint64_t frames = 0;
     bool quit = false;
     while(!quit){
         uint64_t start = SDL_GetPerformanceCounter();
-        if(std::chrono::steady_clock::now() - timer > std::chrono::microseconds(1666)){
-            if(delay_timer_ > 0)
-                delay_timer_--;
-            if(sound_timer_ > 0) {
-                sound_timer_--;
-                if(sound_timer_ == 0){
-                    //buzz =
-                }
-            }
-
-            timer = std::chrono::steady_clock::now();
-        }
+        printf("%i\n", delay_timer_);
 
         bool draw = false;
         for(int i = 0; i < 5 * 17; i++){
             quit = quit || CheckInput();
             draw = draw || RunCycle();
+
+            if(sound_timer_ != 0){
+                Mix_PlayChannel(-1, buzz_, 0);
+            }
         }
+
+        if(delay_timer_ > 0)
+            delay_timer_--;
+
+        if(sound_timer_ > 0)
+            sound_timer_--;
 
         if(draw)
             Draw();
+
         uint64_t end = SDL_GetPerformanceCounter();
         float elapsed = (end - start) / (float)SDL_GetPerformanceFrequency() * 1000.0f;
         SDL_Delay(floor(17 - elapsed));
@@ -153,7 +159,7 @@ bool System::RunCycle() {
     uint8_t nn = (opcode & 0xFF);
     uint16_t nnn = (opcode & 0xFFF);
 
-    printf("%x - %x [reg: %x] [1: %s] [index: %x]\n", counter_, opcode, registers_[0], keys_[1] ? "down" : "up", index_);
+    //printf("%x - %x [reg: %x] [1: %s] [index: %x]\n", counter_, opcode, registers_[0], keys_[1] ? "down" : "up", index_);
 
     bool draw = false;
     if(opcode == 0x00E0) {
@@ -161,9 +167,7 @@ bool System::RunCycle() {
         draw = true;
     } else if (opcode == 0x00EE){
         counter_ = stack_[0];
-        printf("a %x %x\n", stack_[0], stack_[1]);
         memcpy(stack_, stack_ + 1, 15);
-        printf("b %x\n", stack_[0]);
         stack_[15] = 0;
         return draw;
     }

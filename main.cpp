@@ -3,7 +3,7 @@
 #include "System.h"
 
 int main() {
-    System system("games/chip8-test-suite.ch8");
+    System system("games/7-beep.ch8");
     system.Start();
     return 0;
 }
